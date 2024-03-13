@@ -1,0 +1,119 @@
+---
+- name: Install Wazuh Agent
+  hosts: "{{ hosts_var | default('linux_servers') }}"
+  become: true
+  gather_facts: yes
+  vars:
+    wazuh_manager_ip: '193.225.251.15'
+
+  tasks:
+    - name: Display Ansible Distribution
+      debug:
+        var: ansible_os_family
+
+    - name: Check OS distribution
+      block:
+        - name: Run dpkg --configure -a
+          command: dpkg --configure -a
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Install dependencies for Debian
+          package:
+            name:
+              - python3
+              - apt-transport-https
+              - ca-certificates
+              - curl
+              - gnupg
+            state: present
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Install dependencies for RedHat
+          yum:
+            name:
+              - python
+              - ca-certificates
+              - curl
+              - gnupg
+            state: present
+          when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Add Wazuh repository key
+      block:
+        - name: Add Wazuh repository key for Debian
+          apt_key:
+            url: http://packages.wazuh.com/key/GPG-KEY-WAZUH
+            state: present
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Add Wazuh repository key for RedHat
+          rpm_key:
+            key: http://packages.wazuh.com/key/GPG-KEY-WAZUH
+            state: present
+          when: ansible_facts['distribution'] == 'RedHat'
+
+    - name: Add Wazuh repository
+      block:
+        - name: Add Wazuh repository for Debian
+          apt_repository:
+            repo: 'deb http://packages.wazuh.com/4.x/apt/ stable main'
+            state: present
+            update_cache: yes
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Add Wazuh repository for RHEL
+          yum_repository:
+            name: wazuh
+            description: Wazuh Repository
+            baseurl: http://packages.wazuh.com/4.x/yum/
+            gpgcheck: yes
+            enabled: yes
+          when: ansible_facts['distribution'] == 'RedHat'
+
+    - name: Install Wazuh agent
+      block:
+        - name: Install Wazuh agent on Debian
+          apt:
+            name: wazuh-agent
+            state: present
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Install Wazuh agent on RedHat
+          yum:
+            name: wazuh-agent
+            state: present
+          when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Replace MANAGER_IP with new address in ossec.conf Debian
+      replace:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>.*<\/address>'
+        replace: '<address>{{ wazuh_manager_ip }}</address>'
+      when: ansible_facts['os_family'] == 'Debian'
+      notify:
+        - Restart Wazuh Agent on Debian
+
+    - name: Replace MANAGER_IP with new address in ossec.conf Debian
+      replace:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>.*<\/address>'
+        replace: '<address>{{ wazuh_manager_ip }}</address>'
+      when: ansible_facts['os_family'] == 'RedHat'
+      notify:
+        - Restart Wazuh Agent on RedHat
+
+  handlers:
+    - name: Restart Wazuh Agent
+      block:
+        - name: Restart Wazuh Agent on Debian
+          service:
+            name: wazuh-agent
+            state: restarted
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: Restart Wazuh Agent on RedHat
+          systemd:
+            name: wazuh-agent
+            state: restarted
+          when: ansible_facts['os_family'] == 'RedHat'
+          

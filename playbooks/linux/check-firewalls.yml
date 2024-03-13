@@ -1,0 +1,92 @@
+#start the playbook ansible-playbook -i inventory.ini -e hosts_var=linux_servers check_firewalls-2.yml
+---
+- name: Install/Checking firewalld or iptables on the target hosts
+  hosts: "{{ hosts_var | default('linux_servers') }}"
+  become: yes
+
+  tasks:
+    - name: Install firewalld or iptables on the target hosts
+      block:
+        - name: Install firewalld on Ubuntu target hosts
+          ansible.builtin.apt:
+            name:
+              - firewalld
+            state: present
+          when: ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Install firewalld on Fedora target hosts
+          ansible.builtin.yum:
+            name:
+              - firewalld
+            state: present
+          when: ansible_facts['distribution'] == 'Fedora'
+
+        - name: Install firewalld on Fedora target hosts
+          ansible.builtin.dnf:
+            name:
+              - iptables
+            state: present
+          when: ansible_facts['distribution'] == 'RedHat'
+
+    - name: Start and enable firewalld or iptables on target hosts
+      block:
+        - name: Start and enable firewalld
+          ansible.builtin.service:
+            name: firewalld
+            state: started
+            enabled: true
+          when: ansible_facts['distribution'] == 'Ubuntu' or ansible_facts['distribution'] == 'Fedora'
+
+    - name: Read firewalld or iptables on target hosts
+      block:
+        - name: Read firewalld on Ubuntu and Fedora machines
+          ansible.builtin.command: >
+            firewall-cmd --list-all
+          register: firewall_list
+          ignore_errors: true
+          when: ansible_facts['distribution'] == 'Ubuntu' or ansible_facts['distribution'] == 'Fedora'
+
+        - name: Read iptables on RedHat machines
+          ansible.builtin.command: >
+            iptables -t nat -L
+          register: iptables_list
+          ignore_errors: true
+          when: ansible_facts['distribution'] == 'RedHat'
+
+    - name: Create a directory
+      ansible.builtin.file:
+        path: /tmp/firewall
+        state: directory
+      delegate_to: localhost
+
+    - name: Create output log files
+      block:
+        - name: Create output log file for Ubuntu and Fedora machines
+          local_action:
+            module: lineinfile
+            path: "/tmp/firewall/{{ inventory_hostname }}_{{ ansible_ssh_host }}.txt"
+            line: |
+              ============FIREWALLD-LOG=============
+              Target Host: {{ ansible_ssh_host }}
+              {% for line in firewall_list.stdout_lines %}
+              {{ line }}
+              {% endfor %}
+            create: yes
+          when:
+            - firewall_list is defined
+            - ansible_facts['distribution'] == 'Ubuntu' or ansible_facts['distribution'] == 'Fedora'
+
+        - name: Create output log file for Ubuntu and Fedora machines
+          local_action:
+            module: lineinfile
+            path: "/tmp/firewall/{{ inventory_hostname }}_{{ ansible_ssh_host }}.txt"
+            line: |
+              ============IPTABLES-LOG=============
+              Target Host: {{ ansible_ssh_host }}
+              {% for line in iptables_list.stdout_lines %}
+              {{ line }}
+              {% endfor %}
+            create: yes
+          when:
+            - iptables_list is defined
+            - ansible_facts['distribution'] == 'RedHat'

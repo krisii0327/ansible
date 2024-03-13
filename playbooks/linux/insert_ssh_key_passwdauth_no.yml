@@ -1,0 +1,120 @@
+---
+- name: Copy the SSH key to the servers and change the PasswordAuthentication to "no"
+  hosts: "{{ hosts_var | default('linux_servers') }}"
+  become: true
+  vars:
+   user: "bt2"
+   path: "/home/{{ user }}/.ssh/authorized_keys"
+   ssh_pubkey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDZI5wSCsOkHNjxy1FF2QUSuc3b43/UBpQNjNETEv90wkRjlfq+JYrXdyd4rXHFNqzhPAQjehC2c/0SeG4nSTK+FPero+IZhwZkQEsl6Q4/ksQKcxBVgefEdg1b9OPkPEaDgqufs1mOHbHotz0H6CA9LmQKaNAVqTb+WLtV/c8h1ueNuTf4Q00ZqdCEpj5gaNiz26iqYVV32vkpCT6QPh8t/PjbjdfrvTGHcY1BMlLMWe9o7jiFTOOpBbfy1VLgEIx4UrlL33VbpFmHSq6yrxSAT4CfJWNJw16OlR0+lN99tTagADic9bt3w7thaVKK8j2V0MbluFu5sNP5UvZDwJjI2iEl2bfPPE97fVQLO83febiV7Bi8FoWS5aMfdex1ZJCJXG+ifs6Uwfx/7urpjLYJ2eOHt5MueK9Xl2n+7nUxks7skJ4RuVaZqbMZ1YYUsNOcyf1RQQaBv9BtYCB6yqQde/vqunIbJs1uSELos+IubHrJicXMb9/IR2K9Xvzmh5E=
+
+  tasks:
+    - name: Ensure user bt2 exists
+      user:
+        name: "{{ user }}"
+        comment: "{{ user }} user for Ansible Control Node access"
+        password: "$y$j9T$kNdTbuOLbB/ewVxARljvf/$MSFGLOBk8rh5XKVV3dk7NFKYCwHe0eG.3WjOHSd7h63"
+        home: /home/{{ user }}
+        shell: /bin/bash
+        create_home: yes
+        state: present
+
+    - name: Ensure home directory is owned by the user
+      file:
+        path: /home/{{ user }}
+        owner: "{{ user }}"
+        group: "{{ user }}"
+        state: directory
+
+    - name: Ensure home/.ssh directory is owned by the user
+      file:
+        path: /home/{{ user }}/.ssh
+        owner: "{{ user }}"
+        group: "{{ user }}"
+        state: directory
+
+    # - name: Allow bt2 Ansible Control Node user to run sudo without a password
+    #   lineinfile:
+    #     path: /etc/sudoers.d/bt2
+    #     line: 'bt2 ALL=(ALL) NOPASSWD: /bin/su - *'
+    #     validate: '/usr/sbin/visudo -cf %s'
+    #     create: yes
+    #     state: present
+
+    - name: Add {{ user }} usermod
+      ansible.builtin.command: >
+        usermod -aG sudo {{ user }}
+
+    - name: Add {{ user }} to sudoers
+      blockinfile:
+        path: /etc/sudoers
+        marker: "### {mark} ANSIBLE MANAGED BLOCK ###"
+        content: |
+           {{ user }} ALL=(ALL)   NOPASSWD: /bin/su -
+           {{ user }} ALL=(ALL)   NOPASSWD: /bin/su - *
+        validate: '/usr/sbin/visudo -cf %s'
+        create: yes
+        state: present
+
+    - name: Create /home/user/authorized_keys
+      ansible.builtin.file:
+        path: /home/{{ user }}/.ssh/authorized_keys
+        owner: "{{ user }}"
+        group: "{{ user }}"
+        mode: 0644
+        state: touch
+
+    - name: Copy the SSH key to the servers
+      lineinfile:
+       path: "/home/{{ user }}/.ssh/authorized_keys"
+       line: "{{ ssh_pubkey }}"
+       state: present
+
+    - name: Check SSH pubkey exists in authorized_keys
+      lineinfile:
+        path: "/home/{{ user }}/.ssh/authorized_keys"
+        line: '{{ ssh_pubkey }}'
+        state: present
+      register: check_ssh_authorized_keys
+
+    - name: Delete PasswordAuthentication string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        state: absent
+        regexp: '^.*PasswordAuthentication'
+
+    - name: Delete RemoteRootLogin string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        state: absent
+        regexp: '^.*PermitRootLogin'
+
+    - name: Hashtag Includes string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '(?:\s+)?Include\s+\/etc\/ssh\/sshd_config.d\/\*.conf'
+        line: '#Include /etc/ssh/sshd_config.d/*.conf'
+
+    - name: Hashtag AuthorizedKeysFile string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '(?:\s+)?AuthorizedKeysFile\s+\/etc\/ssh\/authorized_keys.d\/%u'
+        line: '#AuthorizedKeysFile /etc/ssh/authorized_keys.d/%u'
+
+    - name: Add PasswordAuthentication string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'PasswordAuthentication no'
+        insertafter: EOF
+        state: present
+
+    - name: Add PermitRootLogin string
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: 'PermitRootLogin no'
+        insertafter: EOF
+        state: present
+
+    - name: Restart SSH service
+      service:
+        name: sshd
+        state: restarted

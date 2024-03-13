@@ -1,0 +1,32 @@
+---
+- name: Download Wazuh MSI Installer
+  hosts: "{{ hosts_var | default('windows_servers') }}"
+  gather_facts: no
+  vars:
+    wazuh_manager_ip: '193.225.251.15'
+  
+  tasks:   
+    - name: Create installation directory
+      win_shell: |
+        $installDir = "C:\\Wazuh"
+        New-Item -ItemType Directory -Path $installDir -Force
+      register: create_dir
+
+    - name: Download Wazuh MSI Installer
+      win_shell: |
+        $url = "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.7.2-1.msi"
+        $outputFile = "C:\\Wazuh\\Wazuh-Installer.msi"
+        Invoke-WebRequest -Uri $url -OutFile $outputFile
+      when: create_dir.changed
+
+    - name: Install and configure Wazuh Agent
+      win_shell: |
+        $msiPath = "C:\\Wazuh\\Wazuh-Installer.msi"
+        Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $msiPath /quiet /qn /norestart WAZUH_MANAGER={{ wazuh_manager_ip }} WAZUH_REGISTRATION_SERVER={{ wazuh_manager_ip }}" -Wait
+      args:
+        executable: powershell
+      when: create_dir.changed
+
+    - name: Start Wazuh Agent Service
+      win_shell: Start-Service -Name "Wazuh"
+      when: create_dir.changed

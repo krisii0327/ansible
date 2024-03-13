@@ -1,0 +1,41 @@
+---
+- name: Install and configure Elastic Agent on Windows
+# hosts: windows_servers
+  hosts: "{{ hosts_var | default('windows_servers') }}"
+  gather_facts: yes
+  vars:
+    token: 'Ull6YjU0MEJpZjh1cVRRUGJiM0c6bVFpNXJxY05ScmVJeFdvVEMwQzFJZwUll6YjU0MEJpZjh1cVRRUGJiM0c6bVFpNXJxY05ScmVJeFdvVEMwQzFJZw'
+    url: 'https://193.225.251.185:8220/'
+  tasks:
+    - name: Set ProgressPreference to SilentlyContinue
+      win_shell: $ProgressPreference = 'SilentlyContinue'
+
+    - name: Create installation directory
+      win_shell: |
+        $installDir = "C:\\Elastic"
+        New-Item -ItemType Directory -Path $installDir -Force
+
+    - name: Download Elastic Agent zip file
+      win_shell: |
+        Invoke-WebRequest -Uri http://193.225.251.185:8080/elastic-agent-8.12.2-windows-x86_64.zip -OutFile elastic-agent-8.12.2-windows-x86_64.zip
+      args:
+        chdir: C:\Elastic
+
+    - name: Extract Elastic Agent zip file
+      win_shell: |
+        Expand-Archive .\elastic-agent-8.12.2-windows-x86_64.zip -DestinationPath .
+      args:
+        chdir: C:\Elastic
+
+    - name: Change directory to Elastic Agent folder
+      win_shell: |
+        cd elastic-agent-8.12.2-windows-x86_64
+      args:
+        chdir: C:\Elastic
+
+    - name: Install Elastic Agent
+      win_shell: |
+        .\elastic-agent.exe install --url={{ url }} --enrollment-token={{ token }}== --insecure
+      args:
+        chdir: C:\Elastic\elastic-agent-8.12.2-windows-x86_64
+        executable: powershell.exe

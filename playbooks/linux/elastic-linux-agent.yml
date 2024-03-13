@@ -1,0 +1,110 @@
+---
+- name: Install and configure Elastic Agent
+  hosts: "{{ hosts_var | default('all') }}"
+  gather_facts: yes
+  become: true
+  vars:
+    token: VUl6ZDU0MEJpZjh1cVRRUHpNY1A6QUZFR0VmZzlUZEtxd3NRYTVkYmxGUQ
+    https: https://193.225.251.185:8220/
+
+  tasks:
+    - name: Check OpenStack access with Apache
+      ansible.builtin.uri:
+        url: 'http://193.225.251.185:8080/'
+      register: checked
+
+    - name: Download Elastic Agent package
+      block:
+      - name: Download Elastic Agent package on Debian
+        get_url:
+          url: http://193.225.251.185:8080/elastic-agent-8.12.2-amd64.deb
+          dest: /tmp/elastic-agent-8.12.2-amd64.deb
+        when:
+          - ansible_facts['os_family'] == 'Debian'
+          - checked is defined
+
+      - name: Download Elastic Agent package on RedHat
+        get_url:
+          url: http://193.225.251.185:8080/elastic-agent-8.12.2-x86_64.rpm
+          dest: /tmp/elastic-agent-8.12.2-x86_64.rpm
+        when:
+          - ansible_facts['os_family'] == 'RedHat'
+          - checked is defined
+
+    - name: Install Elastic Agent
+      block:
+        - name: Extract Elastic Agent package using dpkg on Debian
+          command: >
+            sudo dpkg -i /tmp/elastic-agent-8.12.2-amd64.deb
+          when:
+            - ansible_facts['os_family'] == 'Debian'
+            - checked is defined
+
+        - name: Import Elastic GPG key on RedHat without RedHat distro
+          rpm_key:
+            key: http://artifacts.elastic.co/GPG-KEY-elasticsearch
+            state: present
+          ignore_errors: true
+          when:
+            - ansible_facts['os_family'] == 'RedHat'
+            - ansible_facts['distribution'] != 'RedHat'
+            - checked is defined
+
+        - name: Install Elastic Agent with GPG check disabled on RedHat
+          yum:
+            name: /tmp/elastic-agent-8.12.2-x86_64.rpm
+            state: present
+          vars:
+            yum_disable_gpg_check: yes
+          when:
+            - ansible_facts['os_family'] == 'RedHat'
+            - checked is defined
+
+    - name: Enable and Start Agent service
+      block:
+        - name: Enable Elastic Agent service on Debian
+          service:
+            name: elastic-agent
+            enabled: yes
+          when:
+            - ansible_facts['os_family'] == 'Debian' or ansible_facts['distribution'] == 'RedHat'
+            - checked is defined
+
+        - name: Start Elastic Agent service on Debian
+          service:
+            name: elastic-agent
+            state: started
+          when:
+            - ansible_facts['os_family'] == 'Debian' or ansible_facts['distribution'] == 'RedHat'
+            - checked is defined
+
+        - name: Enable Elastic Agent service on RedHat
+          systemd:
+            name: elastic-agent
+            enabled: yes
+          when:
+            - ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] != 'RedHat'
+            - checked is defined
+
+        - name: Start Elastic Agent service on RedHat
+          systemd:
+            name: elastic-agent
+            state: started
+          when:
+            - ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] != 'RedHat'
+            - checked is defined
+
+    - name: Enroll Elastic Agent
+      block:
+        - name: Enroll Elastic Agent on Debian
+          shell: |
+            yes | elastic-agent enroll --url={{ https }} --enrollment-token={{ token }}== --insecure
+          when:
+            - ansible_facts['os_family'] == 'Debian' or ansible_facts['distribution'] == 'RedHat'
+            - checked is defined
+
+        - name: Enroll Elastic Agent on RedHat
+          ansible.builtin.command: "elastic-agent enroll --url={{ https }} --enrollment-token={{ token }}== --insecure"
+          when:
+            - ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] != 'RedHat'
+            - checked is defined
