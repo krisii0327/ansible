@@ -1,0 +1,130 @@
+---
+- name: Install/Checking firewalld and iptables on target hosts with Ansible
+  hosts: localhost
+  become: true
+  vars:
+    target_hosts:
+      - "ubuntu@192.168.0.250"
+      - "ubuntu@192.168.0.58"
+      - "fedora@192.168.0.140"
+      - "cloud-user@192.168.0.9"
+
+  tasks:
+    - name: Gather facts about the target hosts
+      setup:
+        gather_subset:
+          - distribution
+      delegate_to: "{{ item }}"
+      with_items: "{{ target_hosts }}"
+      register: delegated_facts
+      no_log: true
+
+#    - name: Show distribution information of the target hosts
+#      debug:
+#        msg: "{{ item.ansible_facts['ansible_distribution'] }}"
+#      with_items: "{{ delegated_facts.results }}"
+
+    - name: Install firewalld or iptables on target hosts
+      block:
+        - name: Install firewalld on Debian target hosts
+          ansible.builtin.apt:
+            name:
+              - firewalld
+            state: present
+          delegate_to: "{{ item.item }}"
+          with_items: "{{ delegated_facts.results }}"
+          ignore_errors: true
+          when: "'Ubuntu' == item.ansible_facts.get('ansible_distribution', '') | default('')"
+
+        - name: Install firewalld on Fedora target hosts
+          ansible.builtin.yum:
+            name:
+              - firewalld
+            state: present
+          delegate_to: "{{ item.item }}"
+          with_items: "{{ delegated_facts.results }}"
+          ignore_errors: true
+          when: "'Fedora' == item.ansible_facts.get('ansible_distribution', '') | default('')"
+
+        - name: Install firewalld on RedHat target hosts
+          ansible.builtin.dnf:
+            name:
+              - iptables
+            state: present
+          delegate_to: "{{ item.item }}"
+          with_items: "{{ delegated_facts.results }}"
+          ignore_errors: true
+          when: "'RedHat' == item.ansible_facts.get('ansible_distribution', '') | default('')"
+
+    - name: Read firewalld or iptables on target hosts
+      block:
+        - name: Read firewalld where the distribution is not RedHat
+          ansible.builtin.command: >
+            firewall-cmd --list-all
+          register: firewall_list
+          delegate_to: "{{ item.item }}"
+          with_items: "{{ delegated_facts.results }}"
+          ignore_errors: true
+          when: "'RedHat' != item.ansible_facts.get('ansible_distribution', '') | default('')"
+
+        - name: Read iptables where the RedHat is the distribution
+          ansible.builtin.command: >
+            iptables -t nat -L
+          register: iptables_list
+          delegate_to: "{{ item.item }}"
+          with_items: "{{ delegated_facts.results }}"
+          ignore_errors: true
+          when: "'RedHat' == item.ansible_facts.get('ansible_distribution', '') | default('')"
+
+    - name: Display the outputs
+      block:
+        - name: Display firewall list
+          debug:
+             msg: "{{ {'Target Host': item.item.item, 'Output': item.stdout_lines} }}"
+          with_items: "{{ firewall_list.results }}"
+          when: "'RedHat' != item.item.ansible_facts.get('ansible_distribution', '') | default ('')"
+          delegate_to: localhost
+          no_log: "{{'RedHat' == item.item.ansible_facts.get('ansible_distribution', '')}}"
+          register: firewall_list_output
+
+        - name: Display iptables list
+          debug:
+             msg: "{{ {'Target Host': item.item.item, 'Output': item.stdout_lines} }}"
+          with_items: "{{ iptables_list.results }}"
+          when: "'RedHat' == item.item.ansible_facts.get('ansible_distribution', '') | default ('')"
+          delegate_to: localhost
+          no_log: "{{'RedHat' != item.item.ansible_facts.get('ansible_distribution', '')}}"
+          register: iptables_list_output
+
+#    - name: Debug firewall_output for a specific target host
+#      debug:
+#        var: item.msg['Target Host'].split('@')[1]
+#      loop: "{{ firewall_list_output.results }}"
+#      when: firewall_list_output is defined
+
+    - name: Create a directory
+      ansible.builtin.file:
+        path: /etc/ansible/logs/firewall
+        state: directory
+
+    - name: Create output files
+      block:
+        - name: Create and write into the file
+          ansible.builtin.shell:
+            cmd: |
+              touch /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "===============FIREWALLD-LOG=================" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "Target Host: {{ item.msg['Target Host'] }}" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "{{ item.msg['Output'] | join('\n') }}" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+          loop: "{{ firewall_list_output.results }}"
+          when: "'RedHat' != item.item.item.ansible_facts.get('ansible_distribution', '')"
+
+        - name: Create and write into the file
+          ansible.builtin.shell:
+            cmd: |
+              touch /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "===============IPTABLES-LOG=================" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "Target Host: {{ item.msg['Target Host'] }}" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+              echo "{{ item.msg['Output'] | join('\n') }}" >> /etc/ansible/logs/firewall/{{item.msg['Target Host'].split('@')[1] }}.txt
+          loop: "{{ iptables_list_output.results }}"
+          when: "'RedHat' == item.item.item.ansible_facts.get('ansible_distribution', '')"
