@@ -1,0 +1,71 @@
+---
+- name: Check Docker and Podman on Windows
+  #hosts: windows_servers
+  hosts: "{{ hosts_var | default('windows_servers') }}"
+  gather_facts: true
+  tasks:
+    - name: Check if Docker is installed
+      win_shell: |
+        "docker --version"
+      register: docker_installed
+
+    - name: Display Docker version if installed
+      debug:
+        var: docker_installed.rc
+      when: docker_installed.rc == 0
+
+    - name: Check if Podman is installed
+      win_shell: |
+        "podman --version"
+      register: podman_installed
+
+    - name: Display Podman version if installed
+      debug:
+        var: podman_installed.rc
+      when: podman_installed.rc == 0
+
+    - name: Execute tasks related to Docker if installed
+      block:
+        - name: List Docker images
+          win_shell: |
+            "docker images"
+          register: docker_images
+          ignore_errors: yes
+
+        - name: Display Docker images
+          debug:
+            var: docker_images.stdout_lines
+
+        - name: List running Docker containers
+          win_shell: |
+            "docker ps"
+          register: docker_containers
+          ignore_errors: yes
+
+        - name: Display running Docker containers
+          debug:
+            var: docker_containers.stdout_lines
+          when: docker_installed.rc == 0
+
+        - name: Execute tasks related to Podman if installed
+          block:
+            - name: List Podman images
+              win_shell: |
+                "podman images"
+              register: podman_images
+              ignore_errors: yes
+    
+            - name: Display Podman images
+              debug:
+                var: podman_images.stdout_lines
+    
+            - name: List running Podman containers
+              win_shell: |
+                "podman ps"
+              register: podman_containers
+              ignore_errors: yes
+    
+            - name: Display running Podman containers
+              debug:
+                var: podman_containers.stdout_lines
+          when: podman_installed.rc == 0
