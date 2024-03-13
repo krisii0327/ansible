@@ -1,0 +1,30 @@
+---
+- name: Get Process IDs on Linux servers
+  hosts: linux_servers
+  gather_facts: true
+  become: true
+  vars:
+    date: "{{ ansible_date_time.year }}-{{ ansible_date_time.month }}-{{ ansible_date_time.day }}"
+    time: "{{ ansible_date_time.hour }}:{{ ansible_date_time.minute }}:{{ ansible_date_time.second }}"
+
+  tasks:
+    - name: Get PIDs using ps command
+      command: "ps -e -o pid,cmd --no-headers"
+      register: process_info
+
+    - name: Display Process IDs
+      debug:
+        var: process_info.stdout_lines
+
+    - name: Create logs directory
+      local_action: file
+      args:
+        path: "/tmp/logs"
+        state: directory
+        mode: '0755'
+
+    - name: Save Process IDs to a local file on Ansible server
+      local_action: copy
+      args:
+        content: "{{ process_info.stdout }}"
+        dest: "/tmp/logs/{{ inventory_hostname  }}_{{ date  }}_{{ time  }}.txt"

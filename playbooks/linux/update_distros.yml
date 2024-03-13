@@ -1,0 +1,49 @@
+---
+- name: Update Linux Distributions
+  hosts: "{{ hosts_var | default('linux_servers') }}"
+  become: yes
+  tasks:
+    - name: Update Ubuntu
+      apt:
+        update_cache: yes
+        upgrade: yes
+      when: "'Ubuntu' in ansible_distribution"
+
+    - name: Update Debian
+      apt:
+        update_cache: yes
+        upgrade: yes
+      when: "'Debian' in ansible_distribution"
+
+    - name: Update CentOS
+      yum:
+        name: "*"
+        state: latest
+      when: "'CentOS' in ansible_distribution"
+
+    - name: Update Fedora
+      dnf:
+        name: "*"
+        state: latest
+      when: "'Fedora' in ansible_distribution"
+
+    - name: Update Red Hat
+      yum:
+        name: "*"
+        state: latest
+      when: "'Red Hat' in ansible_distribution"
+
+    - name: Update openSUSE
+      zypper:
+        name: "*"
+        state: latest
+      when: "'openSUSE' in ansible_distribution"
+
+    - name: Update Arch Linux
+      pacman:
+        upgrade: yes
+      when: "'Arch' in ansible_distribution"
+
+    - name: Display update status
+      debug:
+        msg: "Update completed for {{ ansible_distribution }}"
