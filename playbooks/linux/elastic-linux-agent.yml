@@ -4,13 +4,13 @@
   gather_facts: yes
   become: true
   vars:
-    token: VUl6ZDU0MEJpZjh1cVRRUHpNY1A6QUZFR0VmZzlUZEtxd3NRYTVkYmxGUQ
-    https: https://193.225.251.185:8220/
+    token: lorem
+    https: https://0.0.0.0:8220/
 
   tasks:
     - name: Check OpenStack access with Apache
       ansible.builtin.uri:
-        url: 'http://193.225.251.185:8080/'
+        url: 'http://0.0.0.0:8080/'
       register: checked
 
     - name: Download Elastic Agent package
@@ -25,7 +25,7 @@
 
       - name: Download Elastic Agent package on RedHat
         get_url:
-          url: http://193.225.251.185:8080/elastic-agent-8.12.2-x86_64.rpm
+          url: http://0.0.0.0:8080/elastic-agent-8.12.2-x86_64.rpm
           dest: /tmp/elastic-agent-8.12.2-x86_64.rpm
         when:
           - ansible_facts['os_family'] == 'RedHat'
