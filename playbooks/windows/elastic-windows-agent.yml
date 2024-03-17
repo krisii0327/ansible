@@ -4,8 +4,8 @@
   hosts: "{{ hosts_var | default('windows_servers') }}"
   gather_facts: yes
   vars:
-    token: 'Ull6YjU0MEJpZjh1cVRRUGJiM0c6bVFpNXJxY05ScmVJeFdvVEMwQzFJZwUll6YjU0MEJpZjh1cVRRUGJiM0c6bVFpNXJxY05ScmVJeFdvVEMwQzFJZw'
-    url: 'https://193.225.251.185:8220/'
+    token: 'lorem'
+    url: 'https://0.0.0.0:8220/'
   tasks:
     - name: Set ProgressPreference to SilentlyContinue
       win_shell: $ProgressPreference = 'SilentlyContinue'
@@ -17,7 +17,7 @@
 
     - name: Download Elastic Agent zip file
       win_shell: |
-        Invoke-WebRequest -Uri http://193.225.251.185:8080/elastic-agent-8.12.2-windows-x86_64.zip -OutFile elastic-agent-8.12.2-windows-x86_64.zip
+        Invoke-WebRequest -Uri http://0.0.0.0:8080/elastic-agent-8.12.2-windows-x86_64.zip -OutFile elastic-agent-8.12.2-windows-x86_64.zip
       args:
         chdir: C:\Elastic
 
