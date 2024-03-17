@@ -3,7 +3,7 @@
   hosts: "{{ hosts_var | default('windows_servers') }}"
   gather_facts: no
   vars:
-    wazuh_manager_ip: '193.225.251.15'
+    wazuh_manager_ip: '0.0.0.0'
   
   tasks:   
     - name: Create installation directory
