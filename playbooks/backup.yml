@@ -1,0 +1,26 @@
+- name: Get the SSH service name dynamically
+  ansible.builtin.command: "systemctl list-units --type=service --state=active | grep -E 'ssh(d)?\.service'"
+  register: ssh_service_check
+  changed_when: false
+  failed_when: false
+
+- name: Set SSH service name and config file based on systemd output
+  set_fact:
+    ssh_service_name: "{{ 'sshd' if 'sshd' in ssh_service_check.stdout else 'ssh' }}"
+    ssh_config_file: "{{ '/etc/ssh/sshd_config' if 'sshd' in ssh_service_check.stdout else '/etc/ssh/ssh_config' }}"
+
+- name: Modify the appropriate SSH config file (sshd_config or ssh_config)
+  ansible.builtin.lineinfile:
+    path: "{{ ssh_config_file }}"
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+    state: present
+  when:
+    - "'{{ ssh_pubkey }}' in authorized_keys_content.content | b64decode"
+
+- name: Restart the correct SSH service
+  service:
+    name: "{{ ssh_service_name }}"
+    state: restarted
+  when:
+    - "'{{ ssh_pubkey }}' in authorized_keys_content.content | b64decode"
